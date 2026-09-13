@@ -1,0 +1,77 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+
+-- ==========================================
+-- CONFIG
+-- ==========================================
+
+local MIN_MS = 0
+local MAX_MS = 5
+
+-- Start enabled
+lib.AutoPlay = true
+
+-- Keep these at Sick so the random offset
+-- controls the timing
+lib.Chances.Sick = 100
+lib.Chances.Good = 0
+lib.Chances.Ok = 0
+lib.Chances.Bad = 0
+lib.Chances.Miss = 0
+
+-- Disable the built-in Spray randomization
+lib.Spray = false
+
+-- ==========================================
+-- RANDOM 0-5 MS
+-- ==========================================
+
+local function getRandomOffset()
+    return math.random(MIN_MS, MAX_MS)
+end
+
+-- Change timing as notes are added
+lib.Events.NoteAdded:Connect(function(note)
+    local ms = getRandomOffset()
+
+    -- HitOffset uses seconds
+    lib.HitOffset = ms / 1000
+end)
+
+-- ==========================================
+-- AUTOPLAY TOGGLE
+-- Press ` (backtick)
+-- ==========================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Backquote then
+        lib.AutoPlay = not lib.AutoPlay
+
+        if lib.AutoPlay then
+            print("[AUTOPLAY] ENABLED")
+        else
+            print("[AUTOPLAY] DISABLED")
+        end
+    end
+end)
+
+-- ==========================================
+-- STARTUP
+-- ==========================================
+
+lib.HitOffset = getRandomOffset() / 1000
+
+print("==============================")
+print(" Funky Friday Autoplay Loaded")
+print(" Random timing: 0-15ms")
+print(" Toggle: `")
+print("==============================")
+
+return lib
