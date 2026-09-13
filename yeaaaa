@@ -1,0 +1,117 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+
+-- ==================================================
+-- SETTINGS
+-- ==================================================
+
+local MIN_MS = 5
+local MAX_MS = 15
+
+-- 1.0 = compensate for 100% of reported ping
+-- If hits become too early, try 0.8 or 0.9
+local PING_COMPENSATION = 1.0
+
+lib.AutoPlay = true
+lib.Spray = false
+
+lib.Chances.Sick = 100
+lib.Chances.Good = 0
+lib.Chances.Ok = 0
+lib.Chances.Bad = 0
+lib.Chances.Miss = 0
+
+-- ==================================================
+-- GET CURRENT PING
+-- ==================================================
+
+local function getPing()
+    local success, ping = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+
+    if success and ping then
+        return ping
+    end
+
+    return 0
+end
+
+-- ==================================================
+-- 5-15 MS + PING COMPENSATION
+-- ==================================================
+
+local function updateTiming()
+    local targetMs = math.random(MIN_MS, MAX_MS)
+    local pingMs = getPing()
+
+    -- Example:
+    -- 30ms ping
+    -- target = 8ms
+    --
+    -- HitOffset becomes about 38ms,
+    -- causing the autoplay to fire earlier to compensate
+    -- for the network delay.
+
+    local compensation =
+        (pingMs * PING_COMPENSATION) + targetMs
+
+    lib.HitOffset = compensation / 1000
+end
+
+-- Randomize for incoming notes
+lib.Events.NoteAdded:Connect(function()
+    updateTiming()
+end)
+
+-- ==================================================
+-- KEEP PING COMPENSATION UPDATED
+-- ==================================================
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if lib.AutoPlay then
+            updateTiming()
+        end
+    end
+end)
+
+-- ==================================================
+-- ` TO TOGGLE AUTOPLAY
+-- ==================================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Backquote then
+        lib.AutoPlay = not lib.AutoPlay
+
+        if lib.AutoPlay then
+            print("[AUTOPLAY] ON")
+            updateTiming()
+        else
+            print("[AUTOPLAY] OFF")
+        end
+    end
+end)
+
+-- ==================================================
+-- START
+-- ==================================================
+
+updateTiming()
+
+print("--------------------------------")
+print("Autoplay loaded")
+print("Target: 5-15ms")
+print("Ping compensation enabled")
+print("Press ` to toggle")
+print("--------------------------------")
+
+return lib
