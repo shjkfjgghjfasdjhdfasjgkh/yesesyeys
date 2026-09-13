@@ -1,0 +1,110 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+
+-- ==========================================
+-- CONFIG
+-- ==========================================
+
+local MIN_MS = 0
+local MAX_MS = 5
+
+-- 1.0 = full ping compensation
+local PING_COMPENSATION = 1.0
+
+-- Start enabled
+lib.AutoPlay = true
+
+-- Keep hits in Sick range
+lib.Chances.Sick = 100
+lib.Chances.Good = 0
+lib.Chances.Ok = 0
+lib.Chances.Bad = 0
+lib.Chances.Miss = 0
+
+-- Disable built-in random spray
+lib.Spray = false
+
+-- ==========================================
+-- GET PING
+-- ==========================================
+
+local function getPing()
+    local success, ping = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+
+    if success and ping then
+        return ping
+    end
+
+    return 0
+end
+
+-- ==========================================
+-- RANDOM 0-5 MS + PING COMPENSATION
+-- ==========================================
+
+local function updateTiming()
+    local targetMs = math.random(MIN_MS, MAX_MS)
+    local pingMs = getPing()
+
+    local compensatedOffset =
+        (pingMs * PING_COMPENSATION) + targetMs
+
+    lib.HitOffset = compensatedOffset / 1000
+end
+
+-- Change timing when notes are added
+lib.Events.NoteAdded:Connect(function()
+    updateTiming()
+end)
+
+-- Keep adjusting as ping changes
+task.spawn(function()
+    while task.wait(0.1) do
+        if lib.AutoPlay then
+            updateTiming()
+        end
+    end
+end)
+
+-- ==========================================
+-- AUTOPLAY TOGGLE
+-- Press `
+-- ==========================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Backquote then
+        lib.AutoPlay = not lib.AutoPlay
+
+        if lib.AutoPlay then
+            print("[AUTOPLAY] ON")
+            updateTiming()
+        else
+            print("[AUTOPLAY] OFF")
+        end
+    end
+end)
+
+-- ==========================================
+-- STARTUP
+-- ==========================================
+
+updateTiming()
+
+print("==============================")
+print(" Funky Friday Autoplay Loaded")
+print(" Target timing: 0-5ms")
+print(" Ping compensation: ON")
+print(" Toggle key: `")
+print("==============================")
+
+return lib
