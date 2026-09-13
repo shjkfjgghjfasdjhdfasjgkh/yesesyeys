@@ -9,7 +9,7 @@ local UserInputService = game:GetService("UserInputService")
 -- =====================================
 
 local MIN_MS = 0
-local MAX_MS = 15
+local MAX_MS = 18
 
 lib.AutoPlay = true
 
