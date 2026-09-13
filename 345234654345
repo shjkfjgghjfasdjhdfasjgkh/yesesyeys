@@ -1,0 +1,116 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+
+-- ==========================================
+-- CONFIG
+-- ==========================================
+
+local MIN_MS = 0
+local MAX_MS = 5
+
+-- 1 = full ping compensation
+local PING_COMPENSATION = 1
+
+lib.AutoPlay = true
+lib.Spray = false
+
+lib.Chances.Sick = 100
+lib.Chances.Good = 0
+lib.Chances.Ok = 0
+lib.Chances.Bad = 0
+lib.Chances.Miss = 0
+
+-- ==========================================
+-- PING
+-- ==========================================
+
+local function getPing()
+    local success, result = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+
+    if success and result then
+        return result
+    end
+
+    return 0
+end
+
+-- ==========================================
+-- 0-5 MS TARGET
+-- ==========================================
+
+local function updateTiming()
+    local ping = getPing()
+    local target = math.random(MIN_MS, MAX_MS)
+
+    -- IMPORTANT:
+    -- subtract ping instead of adding it
+    --
+    -- Example:
+    -- 100ms ping
+    -- target 3ms
+    -- offset = -97ms
+
+    local offsetMs =
+        target - (ping * PING_COMPENSATION)
+
+    lib.HitOffset = offsetMs / 1000
+end
+
+-- ==========================================
+-- UPDATE PER NOTE
+-- ==========================================
+
+lib.Events.NoteAdded:Connect(function()
+    updateTiming()
+end)
+
+-- Slowly refresh compensation if ping changes
+task.spawn(function()
+    while task.wait(0.25) do
+        if lib.AutoPlay then
+            updateTiming()
+        end
+    end
+end)
+
+-- ==========================================
+-- TOGGLE WITH `
+-- ==========================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Backquote then
+        lib.AutoPlay = not lib.AutoPlay
+
+        if lib.AutoPlay then
+            updateTiming()
+            print("[AUTOPLAY] ON")
+        else
+            print("[AUTOPLAY] OFF")
+        end
+    end
+end)
+
+-- ==========================================
+-- START
+-- ==========================================
+
+updateTiming()
+
+print("==============================")
+print("Autoplay loaded")
+print("Target: 0-5ms")
+print("Adaptive ping compensation: ON")
+print("Press ` to toggle")
+print("==============================")
+
+return lib
