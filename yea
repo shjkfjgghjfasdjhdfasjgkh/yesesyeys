@@ -1,0 +1,59 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+
+-- =====================================
+-- SETTINGS
+-- =====================================
+
+local MIN_MS = 5
+local MAX_MS = 35
+
+lib.AutoPlay = true
+
+-- =====================================
+-- RANDOM HIT OFFSET
+-- =====================================
+
+local function randomizeHitOffset()
+    local ms = math.random(MIN_MS, MAX_MS)
+
+    -- Convert milliseconds -> seconds
+    lib.HitOffset = ms / 1000
+
+    return ms
+end
+
+-- Give every newly detected note a new random timing offset
+lib.Events.NoteAdded:Connect(function(note)
+    randomizeHitOffset()
+end)
+
+-- =====================================
+-- AUTOPLAY TOGGLE
+-- ` key
+-- =====================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Backquote then
+        lib.AutoPlay = not lib.AutoPlay
+
+        if lib.AutoPlay then
+            print("[AUTOPLAY] ON")
+        else
+            print("[AUTOPLAY] OFF")
+        end
+    end
+end)
+
+print("[AUTOPLAY] Loaded")
+print("[AUTOPLAY] Timing:", MIN_MS .. "-" .. MAX_MS .. "ms")
+print("[AUTOPLAY] Press ` to toggle")
+
+return lib
