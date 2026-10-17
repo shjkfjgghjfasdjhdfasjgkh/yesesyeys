@@ -1,0 +1,164 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+
+-- ==========================================
+-- CONFIG
+-- ==========================================
+
+local toggleKey = Enum.KeyCode.Six
+local blockActionName = "AutoplayBlockManualNotes"
+
+-- Density is estimated from NoteAdded events.
+-- If the library adds notes in batches, this estimate
+-- will not represent the actual playable note density.
+local densityWindow = 1
+local sparseNotesPerSecond = 2
+local denseNotesPerSecond = 12
+
+local sparseMinMs = -2
+local sparseMaxMs = 4
+
+local denseMinMs = -8
+local denseMaxMs = 20
+
+local negativeChance = 0.20
+
+local rng = Random.new()
+local noteTimes = {}
+
+lib.AutoPlay = true
+lib.Spray = false
+
+lib.Chances.Sick = 100
+lib.Chances.Good = 0
+lib.Chances.Ok = 0
+lib.Chances.Bad = 0
+lib.Chances.Miss = 0
+
+-- ==========================================
+-- DENSITY
+-- ==========================================
+
+local function getDensity(now)
+    while #noteTimes > 0
+        and now - noteTimes[1] >= densityWindow do
+        table.remove(noteTimes, 1)
+    end
+
+    local notesPerSecond = #noteTimes / densityWindow
+
+    return math.clamp(
+        (notesPerSecond - sparseNotesPerSecond)
+            / (denseNotesPerSecond - sparseNotesPerSecond),
+        0,
+        1
+    )
+end
+
+-- ==========================================
+-- TIMING
+-- ==========================================
+
+local function updateTiming(density)
+    local minMs = sparseMinMs
+        + (denseMinMs - sparseMinMs) * density
+
+    local maxMs = sparseMaxMs
+        + (denseMaxMs - sparseMaxMs) * density
+
+    -- Sparse sections favor values closer to zero.
+    -- Dense sections use a wider, more even distribution.
+    local exponent = 2.5 - 1.5 * density
+    local amount = rng:NextNumber() ^ exponent
+
+    local offsetMs
+
+    if rng:NextNumber() < negativeChance then
+        offsetMs = minMs * amount
+    else
+        offsetMs = maxMs * amount
+    end
+
+    -- No ping subtraction.
+    lib.HitOffset = offsetMs / 1000
+end
+
+-- ==========================================
+-- MANUAL KEY BLOCKING
+-- ==========================================
+
+local function blockManualNotes()
+    return Enum.ContextActionResult.Sink
+end
+
+local function updateInputBlocking()
+    ContextActionService:UnbindAction(blockActionName)
+
+    if lib.AutoPlay then
+        ContextActionService:BindActionAtPriority(
+            blockActionName,
+            blockManualNotes,
+            false,
+            Enum.ContextActionPriority.High.Value + 1000,
+            Enum.KeyCode.Z,
+            Enum.KeyCode.X,
+            Enum.KeyCode.C,
+            Enum.KeyCode.V
+        )
+    end
+end
+
+-- ==========================================
+-- NOTE EVENTS
+-- ==========================================
+
+lib.Events.NoteAdded:Connect(function()
+    local now = os.clock()
+
+    table.insert(noteTimes, now)
+
+    local density = getDensity(now)
+
+    if lib.AutoPlay then
+        updateTiming(density)
+    end
+end)
+
+-- ==========================================
+-- TOGGLE: 6
+-- ==========================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed or UserInputService:GetFocusedTextBox() then
+        return
+    end
+
+    if input.KeyCode ~= toggleKey then
+        return
+    end
+
+    lib.AutoPlay = not lib.AutoPlay
+
+    if lib.AutoPlay then
+        updateTiming(getDensity(os.clock()))
+    end
+
+    updateInputBlocking()
+
+    print(lib.AutoPlay and "[AUTOPLAY] ON" or "[AUTOPLAY] OFF")
+end)
+
+-- ==========================================
+-- START
+-- ==========================================
+
+updateTiming(0)
+updateInputBlocking()
+
+print("[AUTOPLAY] ON | Toggle: 6 | Density-based timing")
+
+return lib
