@@ -1,0 +1,164 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local Stats = game:GetService("Stats")
+
+-- ==========================================
+-- CONFIG
+-- ==========================================
+
+local MIN_MS = 1
+local MAX_MS = 20
+
+lib.AutoPlay = true
+lib.Spray = false
+
+lib.Chances.Sick = 100
+lib.Chances.Good = 0
+lib.Chances.Ok = 0
+lib.Chances.Bad = 0
+lib.Chances.Miss = 0
+
+-- ==========================================
+-- BLOCK Z/X/C/V WHILE ENABLED
+-- ==========================================
+
+local blockActionName = "AutoplayBlockManualNotes"
+
+local function blockManualNotes()
+    return Enum.ContextActionResult.Sink
+end
+
+local function updateInputBlocking()
+    ContextActionService:UnbindAction(blockActionName)
+
+    if lib.AutoPlay then
+        ContextActionService:BindActionAtPriority(
+            blockActionName,
+            blockManualNotes,
+            false,
+            Enum.ContextActionPriority.High.Value + 1000,
+            Enum.KeyCode.Z,
+            Enum.KeyCode.X,
+            Enum.KeyCode.C,
+            Enum.KeyCode.V
+        )
+    end
+end
+
+-- ==========================================
+-- RANDOM GENERATOR
+-- ==========================================
+
+local rng = Random.new()
+
+local function randomTarget()
+    local typeRoll = rng:NextInteger(1, 4)
+
+    if typeRoll == 1 then
+        return rng:NextNumber(1, 5)
+    elseif typeRoll == 2 then
+        return rng:NextNumber(16, 20)
+    else
+        return rng:NextNumber(MIN_MS, MAX_MS)
+    end
+end
+
+-- ==========================================
+-- GET PING
+-- ==========================================
+
+local function getPing()
+    local success, ping = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+
+    if success and ping then
+        return ping
+    end
+
+    return 0
+end
+
+-- ==========================================
+-- TIMING
+-- ==========================================
+
+local lastTarget = 10
+
+local function updateTiming()
+    local ping = getPing()
+    local target = randomTarget()
+    local attempts = 0
+
+    while math.abs(target - lastTarget) < 4 and attempts < 10 do
+        target = randomTarget()
+        attempts += 1
+    end
+
+    lastTarget = target
+
+    local offsetMs = target - ping
+    lib.HitOffset = offsetMs / 1000
+
+    print(string.format(
+        "[TIMING] Target: %.2fms | Ping: %.1fms | Offset: %.2fms",
+        target,
+        ping,
+        offsetMs
+    ))
+end
+
+-- ==========================================
+-- CHANGE TIMING FOR EACH NEW NOTE
+-- ==========================================
+
+lib.Events.NoteAdded:Connect(function()
+    if lib.AutoPlay then
+        updateTiming()
+    end
+end)
+
+-- ==========================================
+-- AUTOPLAY TOGGLE
+-- Press 6
+-- ==========================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed or UserInputService:GetFocusedTextBox() then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Six then
+        lib.AutoPlay = not lib.AutoPlay
+
+        updateInputBlocking()
+
+        if lib.AutoPlay then
+            updateTiming()
+            print("[AUTOPLAY] ON")
+        else
+            print("[AUTOPLAY] OFF")
+        end
+    end
+end)
+
+-- ==========================================
+-- START
+-- ==========================================
+
+updateTiming()
+updateInputBlocking()
+
+print("================================")
+print(" Funky Friday Autoplay")
+print(" Range: 1-20ms")
+print(" Aggressive fluctuation: ON")
+print(" Ping compensation: ON")
+print(" Toggle: 6")
+print("================================")
+
+return lib
