@@ -3,18 +3,34 @@ local lib = loadstring(game:HttpGet(
 ))()
 
 local UserInputService = game:GetService("UserInputService")
-local Stats = game:GetService("Stats")
+local ContextActionService = game:GetService("ContextActionService")
 
 -- ==========================================
 -- CONFIG
 -- ==========================================
 
-local MIN_MS = 1
-local MAX_MS = 20
+local toggleKey = Enum.KeyCode.Six
+local blockActionName = "AutoplayBlockManualNotes"
 
--- Start enabled
+-- Density is estimated from NoteAdded events.
+-- If the library adds notes in batches, this estimate
+-- will not represent the actual playable note density.
+local densityWindow = 1
+local sparseNotesPerSecond = 2
+local denseNotesPerSecond = 12
+
+local sparseMinMs = -2
+local sparseMaxMs = 4
+
+local denseMinMs = -8
+local denseMaxMs = 20
+
+local negativeChance = 0.20
+
+local rng = Random.new()
+local noteTimes = {}
+
 lib.AutoPlay = true
-
 lib.Spray = false
 
 lib.Chances.Sick = 100
@@ -24,131 +40,125 @@ lib.Chances.Bad = 0
 lib.Chances.Miss = 0
 
 -- ==========================================
--- RANDOM GENERATOR
+-- DENSITY
 -- ==========================================
 
-local rng = Random.new()
-
--- Makes the timing move around aggressively
-local function randomTarget()
-    local typeRoll = rng:NextInteger(1, 4)
-
-    -- 25% chance: very low
-    if typeRoll == 1 then
-        return rng:NextNumber(1, 5)
-
-    -- 25% chance: very high
-    elseif typeRoll == 2 then
-        return rng:NextNumber(16, 20)
-
-    -- 50% chance: anywhere
-    else
-        return rng:NextNumber(MIN_MS, MAX_MS)
-    end
-end
-
--- ==========================================
--- GET PING
--- ==========================================
-
-local function getPing()
-    local success, ping = pcall(function()
-        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
-    end)
-
-    if success and ping then
-        return ping
+local function getDensity(now)
+    while #noteTimes > 0
+        and now - noteTimes[1] >= densityWindow do
+        table.remove(noteTimes, 1)
     end
 
-    return 0
+    local notesPerSecond = #noteTimes / densityWindow
+
+    return math.clamp(
+        (notesPerSecond - sparseNotesPerSecond)
+            / (denseNotesPerSecond - sparseNotesPerSecond),
+        0,
+        1
+    )
 end
 
 -- ==========================================
 -- TIMING
 -- ==========================================
 
-local lastTarget = 10
+local function updateTiming(density)
+    local minMs = sparseMinMs
+        + (denseMinMs - sparseMinMs) * density
 
-local function updateTiming()
-    local ping = getPing()
+    local maxMs = sparseMaxMs
+        + (denseMaxMs - sparseMaxMs) * density
 
-    local target = randomTarget()
+    -- Sparse sections favor values closer to zero.
+    -- Dense sections use a wider, more even distribution.
+    local exponent = 2.5 - 1.5 * density
+    local amount = rng:NextNumber() ^ exponent
 
-    -- Prevent nearly identical consecutive hits
-    local attempts = 0
+    local offsetMs
 
-    while math.abs(target - lastTarget) < 4 and attempts < 10 do
-        target = randomTarget()
-        attempts += 1
+    if rng:NextNumber() < negativeChance then
+        offsetMs = minMs * amount
+    else
+        offsetMs = maxMs * amount
     end
 
-    lastTarget = target
-
-    -- Compensate for server latency
-    local offsetMs = target - ping
-
+    -- No ping subtraction.
     lib.HitOffset = offsetMs / 1000
-
-    print(
-        string.format(
-            "[TIMING] Target: %.2fms | Ping: %.1fms | Offset: %.2fms",
-            target,
-            ping,
-            offsetMs
-        )
-    )
 end
 
 -- ==========================================
--- CHANGE TIMING FOR EACH NEW NOTE
+-- MANUAL KEY BLOCKING
+-- ==========================================
+
+local function blockManualNotes()
+    return Enum.ContextActionResult.Sink
+end
+
+local function updateInputBlocking()
+    ContextActionService:UnbindAction(blockActionName)
+
+    if lib.AutoPlay then
+        ContextActionService:BindActionAtPriority(
+            blockActionName,
+            blockManualNotes,
+            false,
+            Enum.ContextActionPriority.High.Value + 1000,
+            Enum.KeyCode.Z,
+            Enum.KeyCode.X,
+            Enum.KeyCode.C,
+            Enum.KeyCode.V
+        )
+    end
+end
+
+-- ==========================================
+-- NOTE EVENTS
 -- ==========================================
 
 lib.Events.NoteAdded:Connect(function()
+    local now = os.clock()
+
+    table.insert(noteTimes, now)
+
+    local density = getDensity(now)
+
     if lib.AutoPlay then
-        updateTiming()
+        updateTiming(density)
     end
 end)
 
--- IMPORTANT:
--- No 0.25 second loop here.
---
--- The old loop kept overwriting HitOffset between notes,
--- which caused the timings to cluster together.
-
 -- ==========================================
--- AUTOPLAY TOGGLE
--- Press `
+-- TOGGLE: 6
 -- ==========================================
 
 UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then
+    if processed or UserInputService:GetFocusedTextBox() then
         return
     end
 
-    if input.KeyCode == Enum.KeyCode.Backquote then
-        lib.AutoPlay = not lib.AutoPlay
-
-        if lib.AutoPlay then
-            updateTiming()
-            print("[AUTOPLAY] ON")
-        else
-            print("[AUTOPLAY] OFF")
-        end
+    if input.KeyCode ~= toggleKey then
+        return
     end
+
+    lib.AutoPlay = not lib.AutoPlay
+
+    if lib.AutoPlay then
+        updateTiming(getDensity(os.clock()))
+    end
+
+    updateInputBlocking()
+
+    print(lib.AutoPlay and "[AUTOPLAY] ON" or "[AUTOPLAY] OFF")
 end)
 
 -- ==========================================
 -- START
 -- ==========================================
 
-updateTiming()
+updateTiming(0)
+updateInputBlocking()
 
-print("================================")
-print(" Funky Friday Autoplay")
-print(" Range: 1-20ms")
-print(" Aggressive fluctuation: ON")
-print(" Ping compensation: ON")
-print(" Toggle: `")
-print("================================")
+print("[AUTOPLAY] ON | Toggle: 6 | Density-based timing")
 
 return lib
