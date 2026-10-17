@@ -1,0 +1,154 @@
+local lib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Null-Cherry/Null-Fire/refs/heads/main/Core/Loaders/Funky-Friday/Autoplay.lua"
+))()
+
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+
+-- ==========================================
+-- CONFIG
+-- ==========================================
+
+local MIN_MS = 1
+local MAX_MS = 20
+
+-- Start enabled
+lib.AutoPlay = true
+
+lib.Spray = false
+
+lib.Chances.Sick = 100
+lib.Chances.Good = 0
+lib.Chances.Ok = 0
+lib.Chances.Bad = 0
+lib.Chances.Miss = 0
+
+-- ==========================================
+-- RANDOM GENERATOR
+-- ==========================================
+
+local rng = Random.new()
+
+-- Makes the timing move around aggressively
+local function randomTarget()
+    local typeRoll = rng:NextInteger(1, 4)
+
+    -- 25% chance: very low
+    if typeRoll == 1 then
+        return rng:NextNumber(1, 5)
+
+    -- 25% chance: very high
+    elseif typeRoll == 2 then
+        return rng:NextNumber(16, 20)
+
+    -- 50% chance: anywhere
+    else
+        return rng:NextNumber(MIN_MS, MAX_MS)
+    end
+end
+
+-- ==========================================
+-- GET PING
+-- ==========================================
+
+local function getPing()
+    local success, ping = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+
+    if success and ping then
+        return ping
+    end
+
+    return 0
+end
+
+-- ==========================================
+-- TIMING
+-- ==========================================
+
+local lastTarget = 10
+
+local function updateTiming()
+    local ping = getPing()
+
+    local target = randomTarget()
+
+    -- Prevent nearly identical consecutive hits
+    local attempts = 0
+
+    while math.abs(target - lastTarget) < 4 and attempts < 10 do
+        target = randomTarget()
+        attempts += 1
+    end
+
+    lastTarget = target
+
+    -- Compensate for server latency
+    local offsetMs = target - ping
+
+    lib.HitOffset = offsetMs / 1000
+
+    print(
+        string.format(
+            "[TIMING] Target: %.2fms | Ping: %.1fms | Offset: %.2fms",
+            target,
+            ping,
+            offsetMs
+        )
+    )
+end
+
+-- ==========================================
+-- CHANGE TIMING FOR EACH NEW NOTE
+-- ==========================================
+
+lib.Events.NoteAdded:Connect(function()
+    if lib.AutoPlay then
+        updateTiming()
+    end
+end)
+
+-- IMPORTANT:
+-- No 0.25 second loop here.
+--
+-- The old loop kept overwriting HitOffset between notes,
+-- which caused the timings to cluster together.
+
+-- ==========================================
+-- AUTOPLAY TOGGLE
+-- Press `
+-- ==========================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Backquote then
+        lib.AutoPlay = not lib.AutoPlay
+
+        if lib.AutoPlay then
+            updateTiming()
+            print("[AUTOPLAY] ON")
+        else
+            print("[AUTOPLAY] OFF")
+        end
+    end
+end)
+
+-- ==========================================
+-- START
+-- ==========================================
+
+updateTiming()
+
+print("================================")
+print(" Funky Friday Autoplay")
+print(" Range: 1-20ms")
+print(" Aggressive fluctuation: ON")
+print(" Ping compensation: ON")
+print(" Toggle: `")
+print("================================")
+
+return lib
